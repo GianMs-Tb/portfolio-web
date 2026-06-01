@@ -1,0 +1,1442 @@
+{
+  "name": "AI Operations Copilot — Main Orchestrator",
+  "nodes": [
+    {
+      "parameters": {
+        "trigger": [
+          "app_mention"
+        ],
+        "channelId": {
+          "__rl": true,
+          "value": "<YOUR_SLACK_CHANNEL_ID>",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.slackTrigger",
+      "typeVersion": 1,
+      "position": [
+        -3520,
+        2100
+      ],
+      "id": "7552ce2e-a783-587f-a9cd-27bd05f578ca",
+      "name": "Slack Trigger",
+      "webhookId": "<WEBHOOK_ID>",
+      "credentials": {
+        "slackApi": {
+          "id": "<CREDENTIAL_ID>",
+          "name": "<CREDENTIAL_NAME>"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// 1. Leemos los datos que entran directamente por el cable a este nodo\nconst inputData = $input.first().json;\n\n// 2. n8n a veces mete los datos de Slack dentro de \"event\", o los deja sueltos. Esto cubre ambas.\nconst slackEvent = inputData.event ? inputData.event : inputData;\n\n// 3. Capturamos el texto real (con un texto de prueba por si ejecutas el nodo a mano)\nconst raw_text = slackEvent.text || 'dame el status https://app.example.com/records/<UUID>';\n\n// 4. Extraemos el link de Platform\nconst dealMatch = raw_text.match(/app.example.com\\/records\\/([0-9a-fA-F-]{36})/i);\nconst deal_id = dealMatch ? dealMatch[1] : null;\n\n// 5. Mandamos los datos reales al resto del flujo\nreturn [{\n  json: {\n    raw_text: raw_text,\n    channel_id: slackEvent.channel || '<YOUR_SLACK_CHANNEL_ID>', // Salvavidas de canal si pruebas a mano\n    thread_ts: slackEvent.thread_ts || slackEvent.ts || '1620000000.000100', // Salvavidas de hilo\n    slack_user_id: slackEvent.user || '<YOUR_SLACK_USER_ID>',\n    deal_id: deal_id,\n    application_id: deal_id,\n    has_deal_link: !!deal_id\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -3300,
+        2100
+      ],
+      "id": "11ddfe1c-622c-5d4c-b548-073d827e2ef7",
+      "name": "Extract Context"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "status",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "<UUID>"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "status"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "missing",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "<UUID>"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "missing"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "snapshot",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "<UUID>"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "snapshot"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "score",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "<UUID>"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "score"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "help",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "<UUID>"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "help"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "<UUID>",
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "missing_link",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "missing_link"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        -2186,
+        2316
+      ],
+      "id": "a46e2d66-fb7d-5cc3-867a-3ccf29fdcea7",
+      "name": "Action Router"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "<SUBWORKFLOW_ID>",
+          "mode": "list",
+          "cachedResultName": "<AUTH_SUBWORKFLOW_NAME>"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        -1888,
+        2000
+      ],
+      "id": "d5b5f7d6-b7e8-5ffb-9b42-12b0269b3254",
+      "name": "Platform Auth",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "url": "=https://api.example.com/api/int/applications/{{ $('Validate & Enrich Context').first().json.deal_id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Platform Auth').first().json.data.access_token }}"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1668,
+        2000
+      ],
+      "id": "3165d2c3-cf74-572d-ad23-727646764d87",
+      "name": "GET Application",
+      "alwaysOutputData": true,
+      "retryOnFail": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "url": "=https://api.example.com/api/int/communication_logs/filter?type=email&application_ids%5B%5D={{ $('Validate & Enrich Context').first().json.deal_id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Platform Auth').first().json.data.access_token }}"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1448,
+        2000
+      ],
+      "id": "78d11f29-1609-59b9-97ae-a1aaca82bf6f",
+      "name": "GET Email History",
+      "alwaysOutputData": true,
+      "retryOnFail": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const appWrap = $('GET Application').first().json;\nconst emailWrap = $('GET Email History').first().json;\nconst app = appWrap.data ?? appWrap;\nconst business = app.business || {};\nconst fa = app.funding_advisor || {};\nconst stips = Array.isArray(app.stips) ? app.stips : [];\nconst missing_stips = stips\n  .filter((s) => s && s.is_finished === false)\n  .map((s) => s.name || s.title || s.label || s.type || 'Unnamed stip');\nconst logs = emailWrap.data ?? emailWrap ?? [];\nconst sent = (Array.isArray(logs) ? logs : [])\n  .filter((e) => (e.data?.status || e.status) === 'sent')\n  .sort((a, b) => new Date(b.data?.created_at || b.created_at || 0) - new Date(a.data?.created_at || a.created_at || 0));\nconst last = sent[0];\nlet last_email = null;\nlet minutes_since_last_email = null;\nif (last) {\n  const d = last.data || last;\n  const at = d.created_at || d.sent_at || last.created_at;\n  last_email = { subject: d.subject || '(no subject)', date: at, sender: d.sender?.name || d.sender?.email || d.from || 'Unknown' };\n  if (at) minutes_since_last_email = Math.floor((Date.now() - new Date(at).getTime()) / 60000);\n}\nlet next_action = 'All docs received — ready for submission';\nif (missing_stips.length) {\n  if (minutes_since_last_email == null) {\n    next_action = 'Send missing docs email';\n  } else if (minutes_since_last_email >= 2880) {\n    next_action = 'Send missing docs email';\n  } else {\n    const waitH = Math.ceil((2880 - minutes_since_last_email) / 60);\n    next_action = `Wait ${waitH} more hours before next missing-docs email (48h rule)`;\n  }\n}\nconst prequal = app.prequalification || {};\nreturn [{\n  json: {\n    business_name: business.business_legal_name || business.name || app.application_name || 'Unknown',\n    fa_name: [fa.first_name, fa.last_name].filter(Boolean).join(' ') || fa.name || 'Unassigned',\n    fa_email: fa.email || '',\n    stage: app.stage_name || app.stage_category || app.status?.name || 'Unknown',\n    requested_amount: prequal.requested_amount ?? app.requested_amount ?? null,\n    missing_stips,\n    last_email,\n    minutes_since_last_email,\n    next_action,\n    deal_id: $('Validate & Enrich Context').first().json.deal_id,\n    deal_url: 'https://app.example.com/records/' + $('Validate & Enrich Context').first().json.deal_id\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1228,
+        2000
+      ],
+      "id": "475ff586-b227-5e34-bce6-3bd00512fdca",
+      "name": "Build Status Context"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "<SUBWORKFLOW_ID>",
+          "mode": "list",
+          "cachedResultName": "<AUTH_SUBWORKFLOW_NAME>"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "slack_user_id": "={{ $('Validate & Enrich Context').first().json.slack_user_id }}",
+            "deal_id": "={{ $('Validate & Enrich Context').first().json.deal_id }}",
+            "slack_channel_id": "<YOUR_SLACK_CHANNEL_ID>",
+            "slack_thread_ts": "={{ $('Validate & Enrich Context').first().json.thread_ts }}"
+          },
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        -1448,
+        2200
+      ],
+      "id": "3ba51c0e-61b1-5b8d-8b9b-c1cf19da34ca",
+      "name": "Execute Missing Docs",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const p = $('Validate & Enrich Context').first().json;\nconst items = $('Execute Missing Docs').all().map((i) => i.json);\nconst r = items[items.length - 1] || $input.first().json || {};\nlet outcome = 'completed';\nlet summary = '';\nif (r._slack_response) {\n  summary = r._slack_response;\n} else if (r._skip) {\n  outcome = 'skipped';\n  summary = 'No hay documentos pendientes para ' + (r._business_name || p.deal_id) + '.';\n} else if (r._interval_ok === false) {\n  outcome = 'interval_blocked';\n  const mins = r._minutes_since_last ?? 0;\n  const waitH = Math.max(1, Math.ceil((2880 - mins) / 60));\n  summary = 'Intervalo de 48h no cumplido. Quedan aproximadamente ' + waitH + ' horas antes del próximo envío.';\n} else if (r.data || r.success) {\n  outcome = 'sent';\n  summary = 'Email de documentos faltantes enviado correctamente.';\n} else {\n  outcome = 'unclear';\n  summary = 'Subworkflow completado — revisa logs de ejecución.';\n}\nreturn [{ json: { outcome, summary, deal_id: p.deal_id, deal_url: 'https://app.example.com/records/' + p.deal_id } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1228,
+        2200
+      ],
+      "id": "f007de78-b98a-55ef-89b2-c10b0bf81e07",
+      "name": "Interpret Missing Result"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "<SUBWORKFLOW_ID>",
+          "mode": "list",
+          "cachedResultName": "<AUTH_SUBWORKFLOW_NAME>"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "application_id": "={{ $('Validate & Enrich Context').first().json.application_id }}",
+            "slack_channel_id": "<YOUR_SLACK_CHANNEL_ID>",
+            "slack_thread_ts": "={{ $('Validate & Enrich Context').first().json.thread_ts }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "application_id",
+              "displayName": "application_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "contact_email",
+              "displayName": "contact_email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "lender_email",
+              "displayName": "lender_email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "email_subject",
+              "displayName": "email_subject",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "email_html",
+              "displayName": "email_html",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "sender_platform_user_id",
+              "displayName": "sender_platform_user_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "preferred_email_type",
+              "displayName": "preferred_email_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "preferred_email_value",
+              "displayName": "preferred_email_value",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "cc",
+              "displayName": "cc",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "bcc",
+              "displayName": "bcc",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "email_template_id",
+              "displayName": "email_template_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "slack_channel_id",
+              "displayName": "slack_channel_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "slack_thread_ts",
+              "displayName": "slack_thread_ts",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        -1448,
+        2400
+      ],
+      "id": "5bdedc77-ac56-559f-829e-c42c11e62a3d",
+      "name": "Execute Snapshot",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const p = $('Validate & Enrich Context').first().json;\nconst r = $('Execute Snapshot').first().json || {};\nconst ok = r.success === true || r.outcome === 'platform_send_ok' || !!r.data;\nreturn [{\n  json: {\n    outcome: ok ? 'sent' : 'unclear',\n    summary: ok ? 'Secure Document Snapshot PDF enviado correctamente.' : 'Snapshot subworkflow terminó sin confirmación clara de envío.',\n    deal_id: p.deal_id,\n    deal_url: 'https://app.example.com/records/' + p.deal_id\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1228,
+        2400
+      ],
+      "id": "4415ba77-517b-53dc-b3a6-043b248d27de",
+      "name": "Interpret Snapshot Result"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "<SUBWORKFLOW_ID>",
+          "mode": "list",
+          "cachedResultName": "<AUTH_SUBWORKFLOW_NAME>"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "application_id": "={{ $('Validate & Enrich Context').first().json.application_id }}",
+            "slack_channel_id": "<YOUR_SLACK_CHANNEL_ID>",
+            "slack_thread_ts": "={{ $('Validate & Enrich Context').first().json.thread_ts }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "application_id",
+              "displayName": "application_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "contact_email",
+              "displayName": "contact_email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "lender_email",
+              "displayName": "lender_email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "email_subject",
+              "displayName": "email_subject",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "email_html",
+              "displayName": "email_html",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "sender_platform_user_id",
+              "displayName": "sender_platform_user_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "preferred_email_type",
+              "displayName": "preferred_email_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "preferred_email_value",
+              "displayName": "preferred_email_value",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "cc",
+              "displayName": "cc",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "bcc",
+              "displayName": "bcc",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "email_template_id",
+              "displayName": "email_template_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "slack_channel_id",
+              "displayName": "slack_channel_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            },
+            {
+              "id": "slack_thread_ts",
+              "displayName": "slack_thread_ts",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string"
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        -1448,
+        2700
+      ],
+      "id": "aa3a5e7b-5d77-5d32-b8fa-9e212ec03ebb",
+      "name": "Execute Score",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const p = $('Validate & Enrich Context').first().json;\nlet score = null;\nfor (const j of $('Execute Score').all().map((i) => i.json)) {\n  if (j.score_final != null) score = j;\n  if (j.deal_quality_score != null) score = { score_final: j.deal_quality_score, rating: j.rating, justificacion: j.justificacion };\n}\nif (!score) score = $('Execute Score').first().json || {};\nreturn [{\n  json: {\n    score: score.score_final ?? score.deal_quality_score ?? null,\n    rating: score.rating ?? '',\n    justificacion: score.justificacion ?? score.justification ?? '',\n    deal_id: p.deal_id,\n    deal_url: 'https://app.example.com/records/' + p.deal_id\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1228,
+        2700
+      ],
+      "id": "f02b71bd-7d75-5b77-a0f6-3fe7f2c22d9c",
+      "name": "Interpret Score Result"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $('Extract Context').first().json.raw_text }}",
+        "hasOutputParser": true,
+        "messages": {
+          "messageValues": [
+            {
+              "message": "Eres el cerebro analítico de Operations Copilot, un bot de automatización para Platform. Tu única tarea es leer el mensaje del usuario y clasificar su intención en UNA de estas categorías exactas:  status: El usuario quiere saber el estado actual, qué falta o un resumen del deal.  missing: El usuario pide enviar un correo/email pidiendo los documentos faltantes.  snapshot: El usuario quiere generar o enviar el PDF encriptado (Secure Document Snapshot).  score: El usuario pide calcular la calidad, puntaje o score del deal.  help: El usuario pide ayuda, comandos o no sabe qué hacer.  unknown: Saludos casuales, charlas que no tienen que ver con el trabajo, o peticiones fuera de tu alcance.  Debes devolver ÚNICAMENTE un objeto JSON válido con esta estructura: {\"intent\": \"uno_de_los_valores_arriba\", \"confidence\": 0.95}"
+            }
+          ]
+        },
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.7,
+      "position": [
+        -3080,
+        2100
+      ],
+      "id": "395df8f1-f6b4-5b5a-8a5e-41ef9e8e72eb",
+      "name": "Basic LLM Chain"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "claude-sonnet-4-20250514",
+          "cachedResultName": "Claude 4 Sonnet"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.3,
+      "position": [
+        -3052,
+        2320
+      ],
+      "id": "a01435ce-2e80-52e4-b92f-321c7424e6ef",
+      "name": "Anthropic Chat Model",
+      "credentials": {
+        "anthropicApi": {
+          "id": "<CREDENTIAL_ID>",
+          "name": "<CREDENTIAL_NAME>"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\n  \"intent\": \"status\",\n  \"confidence\": 0.99\n}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [
+        -2932,
+        2320
+      ],
+      "id": "7dbbdbc0-4522-5139-90fb-676dc7355fb8",
+      "name": "Structured Output Parser1"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 1. Capturar los datos del contexto inicial y la IA\nconst context = $('Extract Context').first().json;\nconst aiResponse = $input.first().json;\n\n// 2. Extraer la decisión de la IA de forma segura\nlet intent = aiResponse?.output?.intent || 'unknown';\nlet confidence = aiResponse?.output?.confidence || 0;\n\n// 3. CASO 1: ¿La intención NO requiere datos de Platform? (help, unknown)\nconst requires_deal = ['status', 'missing', 'snapshot', 'score'].includes(intent);\n\nlet check_history_needed = false;\nlet final_intent = intent;\n\nif (requires_deal) {\n  // CASO 2: Requiere deal y SÍ tiene link en el mensaje actual\n  if (context.has_deal_link) {\n    check_history_needed = false;\n    final_intent = intent; // Todo en orden\n  } \n  // CASO 3: Requiere deal pero NO tiene link en este mensaje (Podría estar en el historial)\n  else if (context.thread_ts && context.thread_ts !== \"\") {\n    check_history_needed = true; \n    final_intent = intent; // Dejamos la intención, pero levantamos una bandera (flag)\n  } \n  // Si pide deal, no hay link actual y tampoco está en un hilo (mensaje suelto)\n  else {\n    final_intent = 'missing_link';\n  }\n}\n\n// 4. Devolver la data unificada\nreturn [{\n  json: {\n    ...context,\n    intent: final_intent,\n    original_intent: intent,\n    confidence,\n    check_history_needed // Esta bandera le dirá a n8n si debe ir a buscar a Slack o no\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -2704,
+        2100
+      ],
+      "id": "a5689a80-ad35-5b58-90ba-872e79269299",
+      "name": "Validate & Enrich Context"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "<UUID>",
+              "leftValue": "={{ $json.check_history_needed }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -2484,
+        2100
+      ],
+      "id": "024e7413-4fde-57c3-b0b7-d648bda7b158",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "resource": "channel",
+        "operation": "replies",
+        "channelId": {
+          "__rl": true,
+          "value": "<YOUR_SLACK_CHANNEL_ID>",
+          "mode": "id"
+        },
+        "ts": "={{ $json.thread_ts }}",
+        "filters": {}
+      },
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        -2186,
+        1800
+      ],
+      "id": "b462ce7b-7912-561b-afe1-0e8c845bb8c1",
+      "name": "Slack",
+      "webhookId": "<WEBHOOK_ID>",
+      "credentials": {
+        "slackOAuth2Api": {
+          "id": "<CREDENTIAL_ID>",
+          "name": "<CREDENTIAL_NAME>"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// 1. Unir todo el texto del historial de Slack en un solo bloque\nconst messages = $input.all().map(item => item.json.text || '').join(' ');\n\n// 2. Traer el contexto y la intención original que habíamos guardado\nconst context = $('Validate & Enrich Context').first().json;\n\n// 3. Buscar el UUID del deal en el historial\nconst dealMatch = messages.match(/app.example.com\\/records\\/([0-9a-fA-F-]{36})/i);\nconst deal_id = dealMatch ? dealMatch[1] : null;\n\n// 4. Lógica de decisión final\nlet final_intent = context.original_intent; // Lo que la IA detectó (ej. 'status')\n\nif (deal_id) {\n  // ¡Bingo! Encontramos el link en el pasado. Lo inyectamos al contexto.\n  context.deal_id = deal_id;\n  context.application_id = deal_id;\n  context.has_deal_link = true;\n} else {\n  // Definitivamente no hay link en todo el hilo. El usuario debe enviarlo.\n  final_intent = 'missing_link';\n}\n\n// 5. Devolver el paquete limpio para el Switch\nreturn [{\n  json: {\n    ...context,\n    intent: final_intent\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1888,
+        1800
+      ],
+      "id": "dba82873-a774-5042-a35b-6530a6a8b3d4",
+      "name": "Extract Link From History"
+    },
+    {
+      "parameters": {
+        "jsCode": "let intent, channel_id, thread_ts, data;\nlet message = \"\";\n\n// 1. DETECTOR DE CARRILES\ntry {\n    const context = $('Validate & Enrich Context').first().json;\n    intent = context.intent;\n    channel_id = context.channel_id;\n    thread_ts = context.thread_ts || \"\";\n    data = $input.first().json;\n} catch (error) {\n    intent = 'proactive_alert';\n    data = $input.first().json; // Ahora toma los datos directamente del nodo Enrich\n    channel_id = data.channel_id;\n    thread_ts = data.thread_ts || \"\";\n}\n\n// 2. FORMATEO DE MENSAJES\nswitch(intent) {\n  \n  case 'proactive_alert': {\n    const dealName = data.deal_name || 'Unknown Deal';\n    \n    // Si el nodo Enrich encontró el UUID usa el link real, sino, usa el de búsqueda.\n    const dealLink = data.deal_url \n      ? `<${data.deal_url}|${dealName}>` \n      : `<https://app.example.com/records?search=${encodeURIComponent(dealName)}|${dealName} (search)>`;\n\n    const faDisplay = (data.fa_name && data.fa_name !== 'Unknown') ? `👤 *FA:* ${data.fa_name}` : `👤 *FA:* Unassigned`;\n    const lenderDisplay = (data.lender && data.lender !== 'Unknown') ? `🏦 *Lender:* ${data.lender}` : `🏦 *Lender:* Unknown`;\n\n    message = `🔔 *New Update for your SBA*\\n`;\n    message += `📌 *Deal:* ${dealLink}\\n`; \n    message += `${faDisplay} | ${lenderDisplay}\\n`;\n    message += `──────────────────────\\n`;\n    message += `${(data.urgency_level || '').includes('URGENT') ? '🚨' : ((data.urgency_level || '').includes('PENDING') ? '⏳' : 'ℹ️')} *Status:* ${data.urgency_level || '🟡 PENDING'}\\n`;\n    message += `📝 *TL;DR:* ${data.tldr || 'No details provided.'}\\n`;\n    message += `👉 *Action:* ${data.required_action || 'Review email manually.'}`;\n    break;\n  }\n\n  // ---> CARRILES ORIGINALES DE SLACK (SIN CAMBIOS) <---\n  case 'status':\n    message = `📋 *Deal Status: ${data.business_name || 'Unknown'}*\\n`;\n    message += `👤 *Advisor:* ${data.fa_name || 'Unassigned'}\\n`;\n    message += `📈 *Stage:* ${data.stage || 'N/A'}\\n`;\n    if (data.missing_stips && data.missing_stips.length > 0) {\n      message += `⚠️ *Missing Documents:* ${data.missing_stips.join(', ')}\\n`;\n    } else {\n      message += `✅ *Documents:* All stips completed.\\n`;\n    }\n    message += `💡 *Next Action:* ${data.next_action || 'Awaiting update'}`;\n    break;\n\n  case 'missing':\n  case 'snapshot':\n    const icon = intent === 'missing' ? '📧' : '📊';\n    const resultIcon = (data.outcome === 'sent' || data.outcome === 'completed') ? '✅' : '⚠️';\n    message = `${icon} *Action Result:*\\n${resultIcon} ${data.summary || 'Completed'}\\n🔗 <${data.deal_url}|View Deal in Platform>`;\n    break;\n\n  case 'score':\n    message = `⭐ *Deal Quality Score*\\n`;\n    message += `*Score:* ${data.score || 0}/100\\n`;\n    message += `*Rating:* ${data.rating || 'N/A'}\\n`;\n    message += `*Justification:* ${data.justificacion || 'No justification provided.'}\\n`;\n    message += `🔗 <${data.deal_url}|View Deal in Platform>`;\n    break;\n\n  case 'help':\n    message = `👋 *Hi! I'm Operations Copilot.*\\nI can help you with any SBA deal. Just write to me naturally or use these commands:\\n• _\"What's the status of this deal [link]\"_\\n• _\"Send the missing documents email\"_\\n• _\"Calculate the score for this deal\"_\\n• _\"Generate the snapshot PDF\"_`;\n    break;\n\n  case 'missing_link':\n    message = `🔍 I'd love to help with that! However, I checked our conversation history and couldn't find a deal link. Could you please share the Platform deal URL here?`;\n    break;\n\n  default: \n    message = `🤖 Hmm, I'm not entirely sure how to proceed with that. Try asking for \"status\", \"score\", \"missing docs\", or simply type \"help\".`;\n}\n\n// 3. SALIDA\nreturn [{\n  json: {\n    slack_message: message,\n    channel_id: channel_id,\n    thread_ts: thread_ts\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1008,
+        2425
+      ],
+      "id": "55e16e9c-9c21-5a14-bf72-b8322b62d440",
+      "name": "Master Slack Formatter"
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "<YOUR_SLACK_CHANNEL_ID>",
+          "mode": "id"
+        },
+        "text": "={{ $json.slack_message }}",
+        "otherOptions": {
+          "includeLinkToWorkflow": false,
+          "thread_ts": {
+            "replyValues": {
+              "thread_ts": "={{ $json.thread_ts}}"
+            }
+          },
+          "mrkdwn": true
+        }
+      },
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        -788,
+        2425
+      ],
+      "id": "332fa997-5cb0-5bc6-b087-a1df39f23634",
+      "name": "Slack1",
+      "webhookId": "<WEBHOOK_ID>",
+      "credentials": {
+        "slackApi": {
+          "id": "<CREDENTIAL_ID>",
+          "name": "<CREDENTIAL_NAME>"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyX",
+              "value": 3,
+              "unit": "minutes"
+            }
+          ]
+        },
+        "filters": {
+          "labelIds": [
+            "Label_3122759108552436559",
+            "INBOX"
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -2484,
+        2900
+      ],
+      "id": "9f8a4c51-420d-595e-86b6-25e805c43271",
+      "name": "Gmail Trigger",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "<CREDENTIAL_ID>",
+          "name": "<CREDENTIAL_NAME>"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Here is the email data:\nSubject: {{ $json.Subject }}\nFrom: {{ $json.From }}\nLatest Message Text:\n{{ String($json.textPlain || $json.snippet || '').replace(/https?:\\/\\/\\S+/g, '').slice(0, 3000) }}\n\nInstructions:\n1. Identify the Deal Name: CRITICAL. This MUST be the specific Client Name, Entity Name, or Business Name (e.g., \"Adriatik\", \"Rhino Courier Inc\"). DO NOT extract generic financial terms, loan types, or bank jargon (Ignore phrases like \"SBA 7a Loan\", \"application\", \"350k\"). Look carefully at the greeting in the body if it's not in the subject.\n2. Identify the FA (Funding Advisor) from the CC list or body context.\n3. Determine Urgency: Use 🔴 URGENT, 🟡 PENDING, or 🟢 INFO.\n4. Write a TL;DR: One clear sentence of what actually happened.\n5. Identify Required Action.\n\nReturn ONLY a valid JSON object exactly matching this structure, filling in the actual values. Do not add any other keys:\n{\n  \"lender\": \"Bank name or Unknown\",\n  \"deal_name\": \"Name of deal\",\n  \"fa_name\": \"Name of FA or Unknown\",\n  \"urgency_level\": \"🔴 URGENT\",\n  \"tldr\": \"Summary here\",\n  \"required_action\": \"Action here\"\n}",
+        "messages": {
+          "messageValues": [
+            {
+              "message": "You are an operations assistant, an expert SBA Funding Assistant. Your task is to extract information from emails. You must output ONLY raw, valid JSON. Never include markdown formatting like ```json or any conversational text."
+            }
+          ]
+        },
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.7,
+      "position": [
+        -2264,
+        2900
+      ],
+      "id": "dde8ef4e-f9db-5104-8e7f-2f40a90ce012",
+      "name": "Basic For Gmail"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "claude-sonnet-4-20250514",
+          "cachedResultName": "Claude 4 Sonnet"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.3,
+      "position": [
+        -2176,
+        3120
+      ],
+      "id": "cc109659-0383-5817-ad56-84f6c126a27f",
+      "name": "Anthropic Chat Model1",
+      "credentials": {
+        "anthropicApi": {
+          "id": "<CREDENTIAL_ID>",
+          "name": "<CREDENTIAL_NAME>"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const rawText = $input.first().json.text;\nlet emailData = {};\n\ntry {\n  emailData = JSON.parse(rawText);\n} catch (e) {\n  emailData = { deal_name: \"New SBA Deal\", tldr: \"Error procesando\", required_action: \"Revisar manual\" };\n}\n\nreturn [{\n  json: {\n    ...emailData, // Pasa el lender, fa_name, etc.\n    deal_name: emailData.deal_name || \"New SBA Deal\",\n    intent: 'proactive_alert',\n    channel_id: '<YOUR_SLACK_CHANNEL_ID>', // El ID de tu canal #micanal\n    thread_ts: null\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1888,
+        2900
+      ],
+      "id": "27bc2863-0d0b-55da-879d-317457141ff8",
+      "name": "Standardize Proactive Alert"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "<SUBWORKFLOW_ID>",
+          "mode": "list",
+          "cachedResultName": "<AUTH_SUBWORKFLOW_NAME>"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        -1668,
+        2900
+      ],
+      "id": "1103c6bf-b069-5657-ac85-5b845ae07fb8",
+      "name": "Authentication"
+    },
+    {
+      "parameters": {
+        "url": "=https://api.example.com/api/int/applications/filter",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "search",
+              "value": "={{ encodeURIComponent($('Standardize Proactive Alert').first().json.deal_name) }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "authorization",
+              "value": "=Bearer {{ $('Authentication').first().json.data.access_token }}"
+            },
+            {
+              "name": "User-Agent",
+              "value": "AI-TEAM"
+            },
+            {
+              "name": "Platform-n8n-workflow",
+              "value": "={{ $workflow.id }}"
+            },
+            {
+              "name": "Platform-n8n-execution",
+              "value": "={{ $execution.id }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1448,
+        2900
+      ],
+      "id": "03268e72-78fe-530b-ac26-009ef2f201f4",
+      "name": "Search Deal by Name"
+    },
+    {
+      "parameters": {
+        "jsCode": "const alert = $('Standardize Proactive Alert').first().json;\nconst searchWrap = $('Search Deal by Name').first().json;\nconst rows = Array.isArray(searchWrap?.data) ? searchWrap.data : [];\n\n// 1. Limpiador inteligente de nombres (quita LLC, acentos, mayúsculas)\nconst normalize = (s) => \n  String(s || '')\n    .normalize('NFD')\n    .replace(/[\\u0300-\\u036f]/g, '')\n    .replace(/\\b(LLC|INC|CORP|CO|LTD)\\b\\.?/gi, '')\n    .toLowerCase()\n    .replace(/[^a-z0-9 ]/g, ' ')\n    .replace(/\\s+/g, ' ')\n    .trim();\n\nconst target = normalize(alert.deal_name);\n\n// 2. Sistema de puntuación para encontrar el mejor match\nfunction scoreRow(row) {\n  const names = [\n    row.business_legal_name,\n    row.application_name,\n    row.business_name,\n    row.client?.name,\n  ].filter(Boolean);\n\n  let best = 0;\n  for (const n of names) {\n    const nn = normalize(n);\n    if (!nn || !target) continue;\n    if (nn === target) best = Math.max(best, 1);\n    else if (nn.includes(target) || target.includes(nn)) best = Math.max(best, 0.9);\n  }\n  return best;\n}\n\n// 3. Ordenamos los resultados por puntuación\nconst ranked = rows\n  .map((r) => ({ r, score: scoreRow(r) }))\n  .sort((a, b) => b.score - a.score);\n\nconst best = ranked[0]?.r || null;\nconst fa = best?.funding_advisor || {};\n\nconst faFromLf = [fa.first_name, fa.last_name].filter(Boolean).join(' ') || fa.name || '';\nconst faName = faFromLf || (alert.fa_name && alert.fa_name !== 'Unknown' ? alert.fa_name : 'Unassigned');\n\nconst dealId = best?.id || null;\n\n// 4. Salida empaquetada lista para Slack\nreturn [{\n  json: {\n    ...alert,\n    deal_id: dealId,\n    deal_url: dealId ? `https://app.example.com/records/${dealId}` : null,\n    fa_name: faName,\n    deal_match_found: !!dealId,\n    deal_match_score: ranked[0]?.score ?? 0,\n    intent: 'proactive_alert'\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1228,
+        2900
+      ],
+      "id": "82439f93-d9a7-5c71-9a0e-a2237c2b233b",
+      "name": "Enrich Proactive"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Slack Trigger": {
+      "main": [
+        [
+          {
+            "node": "Extract Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Context": {
+      "main": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Action Router": {
+      "main": [
+        [
+          {
+            "node": "Platform Auth",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Execute Missing Docs",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Execute Snapshot",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Execute Score",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Master Slack Formatter",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Master Slack Formatter",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Master Slack Formatter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Platform Auth": {
+      "main": [
+        [
+          {
+            "node": "GET Application",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GET Application": {
+      "main": [
+        [
+          {
+            "node": "GET Email History",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GET Email History": {
+      "main": [
+        [
+          {
+            "node": "Build Status Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Status Context": {
+      "main": [
+        [
+          {
+            "node": "Master Slack Formatter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Missing Docs": {
+      "main": [
+        [
+          {
+            "node": "Interpret Missing Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Interpret Missing Result": {
+      "main": [
+        [
+          {
+            "node": "Master Slack Formatter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Snapshot": {
+      "main": [
+        [
+          {
+            "node": "Interpret Snapshot Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Interpret Snapshot Result": {
+      "main": [
+        [
+          {
+            "node": "Master Slack Formatter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Score": {
+      "main": [
+        [
+          {
+            "node": "Interpret Score Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Interpret Score Result": {
+      "main": [
+        [
+          {
+            "node": "Master Slack Formatter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Anthropic Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser1": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Basic LLM Chain": {
+      "main": [
+        [
+          {
+            "node": "Validate & Enrich Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate & Enrich Context": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Slack",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Action Router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack": {
+      "main": [
+        [
+          {
+            "node": "Extract Link From History",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Master Slack Formatter": {
+      "main": [
+        [
+          {
+            "node": "Slack1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gmail Trigger": {
+      "main": [
+        [
+          {
+            "node": "Basic For Gmail",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Basic For Gmail": {
+      "main": [
+        [
+          {
+            "node": "Standardize Proactive Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Anthropic Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Basic For Gmail",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Standardize Proactive Alert": {
+      "main": [
+        [
+          {
+            "node": "Authentication",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Authentication": {
+      "main": [
+        [
+          {
+            "node": "Search Deal by Name",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search Deal by Name": {
+      "main": [
+        [
+          {
+            "node": "Enrich Proactive",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enrich Proactive": {
+      "main": [
+        [
+          {
+            "node": "Master Slack Formatter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "<UUID>",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "f845d5a3e6b66215ead8bb76d2ede3f47d99bf0acbff9d8b25945380037693b7"
+  },
+  "id": "TTj6TWghnUPxXzuu",
+  "tags": []
+}

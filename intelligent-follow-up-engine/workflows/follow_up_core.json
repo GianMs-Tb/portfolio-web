@@ -1,0 +1,675 @@
+{
+  "name": "Intelligent Follow-Up Engine",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## SUB — Send Missing Docs Email v2\n\n### Flujo\n1. Start recibe `slack_user_id` + `deal_id` desde el padre\n2. Platform Authentication → token base\n3. Resolve Sender → mapea Slack ID a Platform ID (team members)\n4. Impersonate Request → token del sender real\n5. GET Application → datos del deal\n6. GET Sender Aliases → alias correcto por lender del deal\n7. GET Email History → historial para detectar follow-up y verificar intervalo 48h\n8. Resolve Template → detecta dinámicamente cuál template usar:\n   - requested_amount ≤ $150K → Streamline | > $150K → Traditional\n   - 0 emails previos → Initial | 1 email → 1st follow-up | 2+ → 2nd follow-up\n9. GET Platform Template → descarga subject + body oficial de Platform\n10. Build Payload → ensambla payload con template + alias del sender\n11. IF Skip → si no hay stips pendientes, termina limpio\n12. IF Interval OK → valida 48h desde último email del mismo sender\n13. POST Email to Platform → envía con token impersonado\n14. POST Platform Note → activity log en el deal\n\n### Templates\n- <TEMPLATE_ID_INITIAL>\n- <TEMPLATE_ID_FOLLOWUP>\n\n### Team Map (team members)\nHardcodeado en Resolve Sender. Para agregar: editar ese Code node.\n",
+        "height": 500,
+        "width": 540,
+        "color": 5
+      },
+      "id": "72d3f99b-aa11-5066-b080-6706313c537f",
+      "name": "README",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        660,
+        -140
+      ]
+    },
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "slack_user_id"
+            },
+            {
+              "name": "deal_id"
+            },
+            {
+              "name": "slack_channel_id"
+            },
+            {
+              "name": "slack_thread_ts"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        200,
+        500
+      ],
+      "id": "b8223159-45f5-5ebf-8ab5-32211817b123",
+      "name": "Start"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "<SUBWORKFLOW_ID>",
+          "mode": "list",
+          "cachedResultName": "<AUTH_SUBWORKFLOW_NAME>"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        420,
+        500
+      ],
+      "id": "2167bf97-b7d7-544b-b037-f3e5b480230e",
+      "name": "Platform Authentication",
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const TEAM_MAP = {\n  '<YOUR_SLACK_USER_ID>': { platform_id: '<PLATFORM_USER_ID>', name: '<OPERATOR_NAME>', role: 'operator' },\n  '<YOUR_SLACK_USER_ID_2>': { platform_id: '<PLATFORM_USER_ID_2>', name: '<OPERATOR_NAME_2>', role: 'operator' }\n};\n\nconst slackUserId  = String($('Start').first().json.slack_user_id    || '').trim();\nconst dealId       = String($('Start').first().json.deal_id          || '').trim();\nconst slackChannel = String($('Start').first().json.slack_channel_id || '').trim();\nconst slackTs      = String($('Start').first().json.slack_thread_ts  || '').trim();\nconst authToken    = String($('Platform Authentication').first().json.data.access_token || '').trim();\n\nif (!slackUserId) throw new Error('slack_user_id is required');\nif (!dealId)      throw new Error('deal_id is required');\nif (!authToken)   throw new Error('access_token is required');\n\nconst sender = TEAM_MAP[slackUserId];\nif (!sender) throw new Error(`Slack user ${slackUserId} not found in TEAM_MAP.`);\n\nconst base = ($vars.platform_api_base_url || 'https://api.example.com').replace(/\\/+$/, '');\n\nreturn [{\n  json: {\n    slack_user_id:     slackUserId,\n    deal_id:           dealId,\n    auth_token:        authToken,\n    slack_channel_id:  slackChannel,\n    slack_thread_ts:   slackTs,\n    sender_platform_id:      sender.platform_id,\n    sender_name:       sender.name,\n    sender_role:       sender.role,\n    _base:             base,\n    _impersonate_url:  `${base}/api/int/users/${sender.platform_id}/impersonate`,\n    _app_endpoint:     `${base}/api/int/applications/${dealId}`,\n    _alias_endpoint:   `${base}/api/int/users/${sender.platform_id}/email_addresses`,\n    _email_endpoint:   `${base}/api/int/communication/emails`,\n    _notes_endpoint:   `${base}/api/int/notes`,\n    _history_endpoint: `${base}/api/int/communication_logs/filter?type=email&application_ids%5B%5D=${dealId}`\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        640,
+        500
+      ],
+      "id": "d5e2a306-7c31-58f8-a8da-f46a626c1478",
+      "name": "Resolve Sender"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json._impersonate_url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $json.auth_token }}"
+            },
+            {
+              "name": "User-Agent",
+              "value": "portfolio-n8n-automation"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        860,
+        500
+      ],
+      "id": "b675a715-c7c4-5b54-97e4-ea79235eae85",
+      "name": "Impersonate Request",
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extrae el token impersonado y lo propaga hacia adelante\nconst imp    = $('Impersonate Request').first().json;\nconst sender = $('Resolve Sender').first().json;\n\nconst impToken = String(\n  imp.data?.access_token ||\n  imp.access_token ||\n  sender.auth_token ||\n  ''\n).trim();\n\nif (!impToken) throw new Error('Impersonation failed — no token returned');\n\nreturn [{\n  json: {\n    ...sender,\n    imp_token: impToken\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1080,
+        500
+      ],
+      "id": "34b6d44d-ce1a-5b3a-9003-f7539e8ea313",
+      "name": "Extract Imp Token"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json._app_endpoint }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $json.imp_token }}"
+            },
+            {
+              "name": "User-Agent",
+              "value": "portfolio-n8n-automation"
+            },
+            {
+              "name": "Platform-n8n-workflow",
+              "value": "={{ $workflow.id }}"
+            },
+            {
+              "name": "Platform-n8n-execution",
+              "value": "={{ $execution.id }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1300,
+        500
+      ],
+      "id": "d2afcbca-39c2-56f7-8f31-52f41aa05b77",
+      "name": "GET Application",
+      "retryOnFail": true,
+      "waitBetweenTries": 2000,
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "url": "={{ $('Extract Imp Token').first().json._alias_endpoint }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Extract Imp Token').first().json.imp_token }}"
+            },
+            {
+              "name": "User-Agent",
+              "value": "portfolio-n8n-automation"
+            },
+            {
+              "name": "Platform-n8n-workflow",
+              "value": "={{ $workflow.id }}"
+            },
+            {
+              "name": "Platform-n8n-execution",
+              "value": "={{ $execution.id }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1520,
+        500
+      ],
+      "id": "85dd3122-7117-5be6-b27f-5ed7581047a3",
+      "name": "GET Sender Aliases",
+      "retryOnFail": true,
+      "waitBetweenTries": 2000,
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "url": "={{ $('Extract Imp Token').first().json._history_endpoint }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Extract Imp Token').first().json.imp_token }}"
+            },
+            {
+              "name": "User-Agent",
+              "value": "portfolio-n8n-automation"
+            },
+            {
+              "name": "Platform-n8n-workflow",
+              "value": "={{ $workflow.id }}"
+            },
+            {
+              "name": "Platform-n8n-execution",
+              "value": "={{ $execution.id }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1740,
+        500
+      ],
+      "id": "308bdfd8-8f67-538c-9746-c4fa6717a6aa",
+      "name": "GET Email History",
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// Resolve Template\n// Determina dinámicamente qué template usar basado en:\n// 1. requested_amount → Streamline (≤$150K) vs Traditional (>$150K)\n// 2. historial de emails del sender → Initial vs 1st vs 2nd follow-up\n// ============================================================\n\nconst TEMPLATES = {\n  streamline_initial:   '<UUID>',\n  traditional_initial:  '<UUID>',\n  followup_1st:         '<UUID>',\n  followup_2nd:         '<UUID>'\n};\n\nconst sender     = $('Extract Imp Token').first().json;\nconst appData    = $('GET Application').first().json.data;\nconst history    = $('GET Email History').first().json.data || [];\n\nif (!appData) throw new Error('GET Application returned no data');\n\n// --- Datos del deal ---\nconst prequal          = appData.prequalification || {};\nconst requestedAmount  = Number(prequal.requested_amount || 0);\nconst missingStips     = (appData.stips || []).filter(s => !s.is_finished);\nconst contactEmail     = (appData.personal_information || {}).email_address || '';\nconst businessName     = (appData.business || {}).business_legal_name || appData.application_name || '';\nconst firstName        = (appData.personal_information || {}).first_name || 'there';\n\n// --- Verificar si hay docs faltantes ---\nif (missingStips.length === 0) {\n  return [{\n    json: {\n      ...sender,\n      _skip: true,\n      _skip_reason: 'No missing documents for this deal',\n      _business_name: businessName\n    }\n  }];\n}\n\n// --- Determinar Streamline vs Traditional ---\nconst isStreamline = requestedAmount > 0 && requestedAmount <= 150000;\n\n// --- Contar emails previos del sender en este deal ---\nconst INTERVAL_MINUTES = 2880; // 48h\n\nconst senderEmails = history.filter(e =>\n  e.data?.status === 'sent' &&\n  String(e.data?.sender?.id) === String(sender.sender_platform_id)\n).sort((a, b) =>\n  new Date(b.data.created_at) - new Date(a.data.created_at)\n);\n\nconst emailCount       = senderEmails.length;\nconst lastEmail        = senderEmails[0] || null;\nconst minutesSinceLast = lastEmail\n  ? Math.floor((Date.now() - new Date(lastEmail.data.created_at).getTime()) / 60000)\n  : null;\nconst intervalOk = lastEmail ? minutesSinceLast >= INTERVAL_MINUTES : true;\n\n// --- Seleccionar template ---\nlet templateId, templateType;\n\nif (emailCount === 0) {\n  templateId   = isStreamline ? TEMPLATES.streamline_initial : TEMPLATES.traditional_initial;\n  templateType = isStreamline ? 'streamline_initial' : 'traditional_initial';\n} else if (emailCount === 1) {\n  templateId   = TEMPLATES.followup_1st;\n  templateType = 'followup_1st';\n} else {\n  templateId   = TEMPLATES.followup_2nd;\n  templateType = 'followup_2nd';\n}\n\nconst base = sender._base;\n\nreturn [{\n  json: {\n    ...sender,\n    _skip:              false,\n    _interval_ok:       intervalOk,\n    _minutes_since_last: minutesSinceLast,\n    _email_count:       emailCount,\n    _template_id:       templateId,\n    _template_type:     templateType,\n    _is_streamline:     isStreamline,\n    _requested_amount:  requestedAmount,\n    _contact_email:     contactEmail,\n    _business_name:     businessName,\n    _first_name:        firstName,\n    _missing_stips:     missingStips.map(s => s.name),\n    _missing_count:     missingStips.length,\n    _template_endpoint: `${base}/api/int/email/template/${templateId}`\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1960,
+        500
+      ],
+      "id": "b1cadeef-0389-5cb2-9263-6411e2389fb3",
+      "name": "Resolve Template"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "skip1",
+              "leftValue": "={{ $json._skip }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2180,
+        500
+      ],
+      "id": "33b1cf42-df5f-5b69-82fb-ff3ed2403293",
+      "name": "IF Skip (no missing docs)"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "interval1",
+              "leftValue": "={{ $json._interval_ok }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2400,
+        400
+      ],
+      "id": "15e769b5-82c1-5934-a463-e354da4b6b2e",
+      "name": "IF Interval OK (48h)"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json._template_endpoint }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $json.imp_token }}"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            },
+            {
+              "name": "User-Agent",
+              "value": "portfolio-n8n-automation"
+            },
+            {
+              "name": "Platform-n8n-workflow",
+              "value": "={{ $workflow.id }}"
+            },
+            {
+              "name": "Platform-n8n-execution",
+              "value": "={{ $execution.id }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2620,
+        300
+      ],
+      "id": "bd104a2f-f194-5e0b-ab69-7670442521f1",
+      "name": "GET Platform Template",
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================================\n// Build Payload\n// Ensambla el payload final con:\n// - subject + body del template oficial de Platform\n// - alias correcto del sender por lender del deal\n// - sender_user_id del impersonado\n// ============================================================\n\nconst resolved   = $('Resolve Template').first().json;\nconst templateData = $('GET Platform Template').first().json.data || {};\nconst aliasData  = $('GET Sender Aliases').first().json;\nconst appData    = $('GET Application').first().json.data;\n\n// --- Resolver alias por lender del deal ---\nconst dealClientName = (appData.client?.name || '').trim().toLowerCase();\nconst aliases        = aliasData.aliases || [];\nconst primary        = aliasData.primary || {};\n\nlet matchedAlias = null;\nif (dealClientName) {\n  matchedAlias = aliases.find(a =>\n    (a.client?.name || '').trim().toLowerCase() === dealClientName\n  );\n}\n\nconst fromEmail = matchedAlias ? matchedAlias.email : (primary.email || '');\nconst fromType  = matchedAlias ? 'alias' : 'gmail_primary';\n\nif (!fromEmail) throw new Error('No email alias found for sender ' + resolved.sender_name);\n\n// --- Subject y body del template ---\nconst subject = templateData.subject || `${resolved._business_name} — Documents Required`;\nconst body    = templateData.body    || '';\n\nif (!body) throw new Error(`Template ${resolved._template_id} returned empty body`);\n\n// --- Payload final ---\nconst appId = resolved.deal_id;\n\nconst emailPayload = {\n  applications:            { [appId]: resolved._contact_email },\n  subject,\n  body,\n  email_template_id:       resolved._template_id,\n  preferred_email_address: {\n    type:         fromType,\n    value:        fromEmail,\n    send_as_bulk: false\n  },\n  sender_user_id: resolved.sender_platform_id\n};\n\nconst noteComment = [\n  `Missing docs email enviado a ${resolved._contact_email}`,\n  `por ${resolved.sender_name} (${resolved.sender_role}).`,\n  `Template: ${resolved._template_type}.`,\n  `Docs: ${resolved._missing_stips.join(', ')}.`,\n  `Alias: ${fromEmail}.`,\n  `Ejecución: ${$execution.id}.`\n].join(' ');\n\nreturn [{\n  json: {\n    ...resolved,\n    _from_email:      fromEmail,\n    _from_type:       fromType,\n    _subject:         subject,\n    _email_payload:   emailPayload,\n    _note_comment:    noteComment\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2840,
+        300
+      ],
+      "id": "52eaa379-229e-588a-8509-c40bf09720d8",
+      "name": "Build Payload"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json._email_endpoint }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $json.imp_token }}"
+            },
+            {
+              "name": "User-Agent",
+              "value": "portfolio-n8n-automation"
+            },
+            {
+              "name": "Platform-n8n-workflow",
+              "value": "={{ $workflow.id }}"
+            },
+            {
+              "name": "Platform-n8n-execution",
+              "value": "={{ $execution.id }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "=applications[{{ $json.deal_id }}][]",
+              "value": "={{ $json._contact_email }}"
+            },
+            {
+              "name": "subject",
+              "value": "={{ $json._subject }}"
+            },
+            {
+              "name": "body",
+              "value": "={{ $json._email_payload.body }}"
+            },
+            {
+              "name": "preferred_email_address[type]",
+              "value": "={{ $json._email_payload.preferred_email_address.type }}"
+            },
+            {
+              "name": "preferred_email_address[value]",
+              "value": "={{ $json._email_payload.preferred_email_address.value }}"
+            },
+            {
+              "name": "preferred_email_address[send_as_bulk]",
+              "value": "0"
+            },
+            {
+              "name": "sender_user_id",
+              "value": "={{ $json.sender_platform_id }}"
+            },
+            {
+              "name": "email_template_id",
+              "value": "={{ $json._template_id }}"
+            },
+            {
+              "name": "cc[]",
+              "value": "={{ $('GET Application').first().json.data.funding_advisor.email }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3060,
+        300
+      ],
+      "id": "72b9107f-8f45-510b-ab1b-40c8d5d718b0",
+      "name": "POST Email to Platform",
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const p = $json;\nconst isSkip     = p._skip;\nconst noInterval = !p._interval_ok;\n\nlet msg;\nif (isSkip) {\n  msg = `✅ No missing documents for *${p._business_name}* — email not sent.`;\n} else if (noInterval) {\n  msg = `⏳ Email not sent for *${p._business_name}* — interval not completed (${p._minutes_since_last} min since last, need 2880).`;\n} else {\n  msg = `⚠️ Email skipped for unknown reason.`;\n}\n\nreturn [{ json: { ...p, _slack_response: msg, _sent: false } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2540,
+        520
+      ],
+      "id": "2d5a9f7c-fc22-596c-9517-eda9600a1e3c",
+      "name": "Build Skip Response"
+    }
+  ],
+  "pinData": {
+    "Start": [
+      {
+        "json": {
+          "slack_user_id": "<YOUR_SLACK_USER_ID>",
+          "deal_id": "<UUID>",
+          "slack_channel_id": "<YOUR_SLACK_CHANNEL_ID>",
+          "slack_thread_ts": ""
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Platform Authentication",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Platform Authentication": {
+      "main": [
+        [
+          {
+            "node": "Resolve Sender",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resolve Sender": {
+      "main": [
+        [
+          {
+            "node": "Impersonate Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Impersonate Request": {
+      "main": [
+        [
+          {
+            "node": "Extract Imp Token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Imp Token": {
+      "main": [
+        [
+          {
+            "node": "GET Application",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GET Application": {
+      "main": [
+        [
+          {
+            "node": "GET Sender Aliases",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GET Sender Aliases": {
+      "main": [
+        [
+          {
+            "node": "GET Email History",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GET Email History": {
+      "main": [
+        [
+          {
+            "node": "Resolve Template",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resolve Template": {
+      "main": [
+        [
+          {
+            "node": "IF Skip (no missing docs)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Skip (no missing docs)": {
+      "main": [
+        [
+          {
+            "node": "Build Skip Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "IF Interval OK (48h)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Interval OK (48h)": {
+      "main": [
+        [
+          {
+            "node": "GET Platform Template",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Skip Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GET Platform Template": {
+      "main": [
+        [
+          {
+            "node": "Build Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Payload": {
+      "main": [
+        [
+          {
+            "node": "POST Email to Platform",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "POST Email to Platform": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "<UUID>",
+  "meta": {
+    "instanceId": "f845d5a3e6b66215ead8bb76d2ede3f47d99bf0acbff9d8b25945380037693b7"
+  },
+  "id": "EsTehOpncT8YFiR0",
+  "tags": []
+}

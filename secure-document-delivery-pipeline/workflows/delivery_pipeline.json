@@ -1,0 +1,796 @@
+{
+  "name": "Secure Document Delivery Pipeline",
+  "nodes": [
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "application_id"
+            },
+            {
+              "name": "contact_email"
+            },
+            {
+              "name": "lender_email"
+            },
+            {
+              "name": "email_subject"
+            },
+            {
+              "name": "email_html"
+            },
+            {
+              "name": "sender_platform_user_id"
+            },
+            {
+              "name": "preferred_email_type"
+            },
+            {
+              "name": "preferred_email_value"
+            },
+            {
+              "name": "cc"
+            },
+            {
+              "name": "bcc"
+            },
+            {
+              "name": "email_template_id"
+            },
+            {
+              "name": "slack_channel_id"
+            },
+            {
+              "name": "slack_thread_ts"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -1820,
+        2000
+      ],
+      "id": "8d198b99-9d87-5cdb-bd36-95d0babe66dc",
+      "name": "Start"
+    },
+    {
+      "parameters": {
+        "content": "## SUB — Secure Document Snapshot Email (FINAL v2)\n\n### Flujo completo\n1. Auth + Impersonate → bearer token del sender\n2. GET Application + Files + Aliases\n3. Build HTML (asunto, cuerpo, detección de snapshot)\n4. **Si hay snapshot:**\n   - Download PDF desde Platform\n   - Encode a base64\n   - Proteger PDF con contraseña (EIN del negocio, fallback ZIP)\n   - **Send vía nodo SendGrid nativo** (credencial existente — no API key en texto)\n5. **Si no hay snapshot:** SendGrid nativo sin adjunto\n6. POST `/api/int/notes` → registra actividad en el deal (sin enviar correo al cliente)\n\n### Credencial usada\n`<CREDENTIAL_NAME>` (id: <CREDENTIAL_ID>)\nYa existente en n8n — sin API key en texto plano.\n\n### Contraseña del PDF\nEIN del negocio → fallback ZIP code.\nEl cliente recibe instrucción en el email.\n\n### Inputs requeridos\n- `application_id`, `contact_email`, `sender_platform_user_id`\n\n### Inputs opcionales\n- `email_subject`, `email_html`, `preferred_email_type`\n- `preferred_email_value`, `cc`, `bcc`\n- `email_template_id`, `slack_channel_id`, `slack_thread_ts`\n",
+        "height": 760,
+        "width": 560,
+        "color": 5
+      },
+      "id": "513e28d6-fd02-58d7-a3c9-2f9dc7e28143",
+      "name": "README — FINAL v2",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -360,
+        1220
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "<SUBWORKFLOW_ID>",
+          "mode": "list",
+          "cachedResultName": "<AUTH_SUBWORKFLOW_NAME>"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        -1600,
+        2000
+      ],
+      "id": "cea796b1-b882-50f2-8050-c39daa39da29",
+      "name": "Platform Authentication",
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.example.com/api/int/users/{{$node[\"Start\"].json[\"sender_platform_user_id\"]}}/impersonate",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "authorization",
+              "value": "=Bearer {{ $('Platform Authentication').first().json.data.access_token }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -1380,
+        2000
+      ],
+      "id": "1f35737c-3674-5e37-8424-77221e95ebcd",
+      "name": "Impersonate Request",
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const imp = $('Impersonate Request').first().json || {};\nconst auth = $('Platform Authentication').first().json || {};\n\nconst token =\n  imp.data?.access_token ||\n  imp.access_token ||\n  auth.data?.access_token ||\n  auth.access_token ||\n  '';\n\nreturn [{ json: { bearer_token: String(token).trim().replace(/^Bearer\\s+/i, '') } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1160,
+        2000
+      ],
+      "id": "b148fa71-d38f-5de8-be85-d0d14890b0e6",
+      "name": "Proper Bearer Token"
+    },
+    {
+      "parameters": {
+        "url": "={{ ($vars.platform_api_base_url || 'https://api.example.com').replace(/\\/+$/, '') }}/api/int/applications/{{ $node[\"Start\"].json[\"application_id\"] }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "authorization",
+              "value": "=Bearer {{ $('Proper Bearer Token').first().json.bearer_token }}"
+            },
+            {
+              "name": "User-Agent",
+              "value": "portfolio-n8n-automation"
+            },
+            {
+              "name": "Platform-n8n-workflow",
+              "value": "={{ $workflow.id }}"
+            },
+            {
+              "name": "Platform-n8n-execution",
+              "value": "={{ $execution.id }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -940,
+        2000
+      ],
+      "id": "fe01f48e-ad52-5027-ae6e-d17a7d2106e3",
+      "name": "GET Application",
+      "retryOnFail": true,
+      "waitBetweenTries": 2000,
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "url": "=https://api.example.com/api/int/applications/{{ $('Start').first().json.application_id }}/files",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "authorization",
+              "value": "=Bearer {{ $('Proper Bearer Token').first().json.bearer_token }}"
+            },
+            {
+              "name": "User-Agent",
+              "value": "portfolio-n8n-automation"
+            },
+            {
+              "name": "Platform-n8n-workflow",
+              "value": "={{ $workflow.id }}"
+            },
+            {
+              "name": "Platform-n8n-execution",
+              "value": "={{ $execution.id }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -720,
+        2000
+      ],
+      "id": "28f39f6d-ea41-5f2d-bb90-6cf6f714a9eb",
+      "name": "GET Files",
+      "retryOnFail": true,
+      "waitBetweenTries": 2000,
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "url": "=https://api.example.com/api/int/users/{{$node[\"Start\"].json[\"sender_platform_user_id\"]}}/email_addresses",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "authorization",
+              "value": "=Bearer {{ $('Proper Bearer Token').first().json.bearer_token }}"
+            },
+            {
+              "name": "User-Agent",
+              "value": "portfolio-n8n-automation"
+            },
+            {
+              "name": "Platform-n8n-workflow",
+              "value": "={{ $workflow.id }}"
+            },
+            {
+              "name": "Platform-n8n-execution",
+              "value": "={{ $execution.id }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 15000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -500,
+        2000
+      ],
+      "id": "0e44dbb1-47f8-5c5e-aca9-7e71f4e87e93",
+      "name": "GET Aliases",
+      "retryOnFail": true,
+      "waitBetweenTries": 2000,
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const app = $('GET Application').first().json.data;\nconst filesData = $('GET Files').first().json.data || [];\nconst aliasData = $('GET Aliases').first().json;\nconst startInput = $node[\"Start\"].json;\nconst customizations = $('GET Email Customization').first().json.data || [];\n\nconst dealClientName = (app.client?.name || '').trim().toLowerCase();\nconst aliases = aliasData.aliases || [];\nconst primary = aliasData.primary || {};\n\nlet matchedAlias = null;\nif (dealClientName) {\n  matchedAlias = aliases.find(a =>\n    (a.client?.name || '').trim().toLowerCase() === dealClientName\n  );\n}\n\nconst aliasEmail  = matchedAlias ? matchedAlias.email : primary.email;\nconst aliasType   = matchedAlias ? 'alias' : 'gmail_primary';\nconst aliasId      = matchedAlias ? matchedAlias.email_alias_id : null;\nconst aliasClient = matchedAlias ? matchedAlias.client.name : 'Primary';\n\nconst snapshot = filesData.find(f => f.file_type === 'business_report');\nconst snapshotFileId   = snapshot ? snapshot.id : null;\nconst snapshotFileName = snapshot ? snapshot.original_name : null;\nconst base              = ($vars.platform_api_base_url || 'https://api.example.com').replace(/\\/+$/, '');\nconst snapshotUrl      = snapshot ? `${base}/api/int/files/${snapshot.id}/download` : null;\n\nconst biz    = app.business || {};\nconst owner  = app.personal_information || {};\nconst prequal = app.prequalification || {};\n\nconst businessName    = biz.business_legal_name || app.application_name || 'Your Business';\nconst firstName       = owner.first_name\n  ? owner.first_name.charAt(0).toUpperCase() + owner.first_name.slice(1).toLowerCase()\n  : 'there';\n\n// PASSWORD LOGIC: NAICS -> EIN -> ZIP\nconst rawNaics = String(biz.naics_code || biz.naics || '').replace(/[^\\d]/g, '').trim();\nconst bizPiis = biz.piis || [];\nconst ownerPiis = owner.piis || [];\nconst einEntry = bizPiis.find(p => p.key === 'EIN') || ownerPiis.find(p => p.key === 'EIN');\nconst rawEin = einEntry ? String(einEntry.value || '').replace(/[^\\d]/g, '').trim() : '';\nconst rawZip   = String(biz.zip || biz.postal_code || owner.zip || '').replace(/[^\\d]/g, '').trim();\n\nconst pdfPassword     = rawEin || rawNaics || rawZip || null;\nlet pdfPasswordType = null;\nif (rawEin) pdfPasswordType = 'EIN';\nelse if (rawNaics) pdfPasswordType = 'NAICS Code';\nelse if (rawZip) pdfPasswordType = 'ZIP Code';\n\n// Metrics for HTML\nconst monthlyRevenue  = biz.actual_monthly_revenue\n  ? '$' + Number(biz.actual_monthly_revenue).toLocaleString('en-US', { maximumFractionDigits: 0 })\n  : null;\nconst creditScore     = biz.actual_credit_score || owner.actual_credit_score || null;\nconst requestedAmount = prequal.requested_amount\n  ? '$' + Number(prequal.requested_amount).toLocaleString('en-US')\n  : null;\n\nconst metrics      = [requestedAmount, monthlyRevenue, creditScore ? 'Credit ' + creditScore : null].filter(Boolean);\nconst metricsLine = metrics.length > 0 ? metrics.join(' · ') : '';\n\n// Missing stips\nconst missingStips = (app.stips || []).filter(s => !s.is_finished);\nlet stipsBlock = '';\nif (missingStips.length > 0) {\n  stipsBlock = '<p><strong>To keep things moving, we still need:</strong></p>'\n    + '<p>' + missingStips.map(s => '• ' + s.name).join('<br/>') + '</p>'\n    + '<p>If any of these are hard to track down, let me know — I can walk you through exactly what\\'s needed.</p>';\n}\n\n// Password block (simple HTML only — no inline styles)\nlet passwordBlock = '';\nif (snapshot && pdfPassword) {\n  passwordBlock = `<p><strong>This document is password-protected.</strong><br/>To open it, enter your business <strong>${pdfPasswordType}</strong> when prompted.</p>`;\n}\n\n// Email body — English, no signature (Platform adds it automatically)\nconst emailHtml = `<p>${firstName},</p>\n  <p>We have an update on the funding application for <strong>${businessName}</strong>.</p>\n  ${metricsLine ? `<p><em>${metricsLine}</em></p>` : ''}\n  <p>Please find the attached <strong>Secure Document Snapshot</strong> with a complete overview of your application, including lender approvals, credit summary, and next steps.</p>\n  ${passwordBlock}\n  ${stipsBlock}\n  <p>We're here to help you move forward as quickly as possible. Don't hesitate to reach out with any questions.</p>`;\n\n// Subject\nconst emailSubject = `${businessName} — Funding Application Update`;\nconst activeCustomization = customizations.find(c => c.active === 1);\nconst emailCustomizationId = activeCustomization ? String(activeCustomization.id) : null;\n\nreturn [{\n  json: {\n    ...startInput,\n    email_subject: startInput.email_subject || emailSubject,\n    email_html: emailHtml,\n    contact_email: startInput.contact_email || owner.email_address || '',\n    preferred_email_value: aliasEmail || startInput.preferred_email_value,\n    preferred_email_type: aliasType || startInput.preferred_email_type,\n    snapshot_file_name: snapshotFileName,\n    snapshot_download_url: snapshotUrl,\n    has_snapshot: !!snapshot,\n    pdf_password: pdfPassword,\n    pdf_password_type: pdfPasswordType,\n    business_name: businessName,\n    email_customization_id: emailCustomizationId,\n    app_data_id: app.id || startInput.application_id\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -60,
+        2000
+      ],
+      "id": "11ef3928-9cbc-52b0-8262-807a7fe8aeb5",
+      "name": "Build HTML"
+    },
+    {
+      "parameters": {
+        "jsCode": "const j     = $json;\nconst token = String($('Proper Bearer Token').first().json.bearer_token || '').trim();\n\nconst appId        = String(j.application_id        || '').trim();\nconst contactEmail = String(j.contact_email         || '').trim();\nconst subject      = String(j.email_subject         || '').trim();\nconst html         = String(j.email_html            || '');\nconst senderId     = String(j.sender_platform_user_id     || '').trim();\nconst prefValue    = String(j.preferred_email_value || '').trim();\nconst prefType     = String(j.preferred_email_type  || 'gmail_primary').trim();\nconst bcc          = String(j.bcc                   || '').trim();\nconst templateId   = String(j.email_template_id     || '').trim();\nconst hasSnapshot  = !!j.has_snapshot;\nconst appDataId    = String(j.app_data_id           || appId).trim();\nconst businessName = String(j.business_name         || appId).trim();\nconst advisorName  = String(j.advisor_name          || 'Funding Advisor').trim();\nconst pdfPassword  = j.pdf_password      || null;\nconst pdfPassType  = j.pdf_password_type || null;\n\nconst slackChannel  = String(j.slack_channel_id || '').trim();\nconst rawTs         = String(j.slack_thread_ts  || '').trim();\nconst slackThreadTs = /^\\d+\\.\\d+$/.test(rawTs) ? rawTs : null;\n\nconst emailRegex = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/;\nconst missing    = [];\n\nif (!appId)        missing.push('application_id');\nif (!contactEmail) missing.push('contact_email');\nelse if (!emailRegex.test(contactEmail)) missing.push('contact_email (formato inválido: ' + contactEmail + ')');\nif (!subject)      missing.push('email_subject');\nif (!html)         missing.push('email_html');\nif (!token)        missing.push('access_token (Auth/Impersonation falló)');\nif (!prefValue)    missing.push('preferred_email_value (alias/from email)');\nif (!senderId)     missing.push('sender_platform_user_id');\n\nif (!hasSnapshot)  missing.push('_warn: sin Secure Document Snapshot — el email se enviará sin adjunto');\nif (hasSnapshot && !pdfPassword) missing.push('_warn: snapshot encontrado pero sin EIN ni ZIP — PDF se enviará sin contraseña');\n\nconst base          = ($vars.platform_api_base_url || 'https://api.example.com').replace(/\\/+$/, '');\nconst notesEndpoint = `${base}/api/int/notes`;\n\nconst hardMissing = missing.filter(m => !String(m).startsWith('_warn'));\nconst ok          = hardMissing.length === 0;\n\nconst noteComment = hasSnapshot\n  ? `Secure Document Snapshot enviado a ${contactEmail}${pdfPassword ? ' (PDF protegido con ' + pdfPassType + ')' : ''}. Asunto: \"${subject}\". Enviado desde ${prefValue}. Ejecución n8n: ${$execution.id}.`\n  : `Email enviado a ${contactEmail} sin adjunto. Asunto: \"${subject}\". Enviado desde ${prefValue}. Ejecución n8n: ${$execution.id}.`;\n\nreturn [{\n  json: {\n    ...j,\n    _clean_app_id:          appId,\n    _clean_app_data_id:     appDataId,\n    _clean_contact_email:   contactEmail,\n    _clean_subject:         subject,\n    _clean_html:            html,\n    _clean_sender_id:       senderId,\n    _clean_pref_value:      prefValue,\n    _clean_pref_type:       prefType,\n    _clean_bcc:             bcc,\n    _clean_template_id:     templateId,\n    _clean_customization_id: String(j.email_customization_id || '').trim(),\n    _clean_slack_channel:   slackChannel,\n    _clean_slack_thread_ts: slackThreadTs,\n    _bearer_for_lf:         token,\n    _notes_endpoint:        notesEndpoint,\n    _has_snapshot:          hasSnapshot,\n    _pdf_password:          pdfPassword,\n    _pdf_password_type:     pdfPassType,\n    _note_comment:          noteComment,\n    _send_ready:            ok,\n    _send_missing:          missing,\n    _business_name:         businessName,\n    _advisor_name:          advisorName\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        160,
+        2000
+      ],
+      "id": "67ac023e-158f-583d-8d62-e402843075d9",
+      "name": "Prepare Send Body"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json._send_ready }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        380,
+        2000
+      ],
+      "id": "d0b5e9a0-cbaa-560e-ba1c-8be45d2440e9",
+      "name": "IF Payload Ready"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "h1",
+              "leftValue": "={{ $json._has_snapshot }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        600,
+        1900
+      ],
+      "id": "8d9ceadc-6feb-5b4c-8d8e-8fb741d7ae94",
+      "name": "IF Has Snapshot PDF"
+    },
+    {
+      "parameters": {
+        "url": "={{ $('Prepare Send Body').first().json.snapshot_download_url || $json.snapshot_download_url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Proper Bearer Token').first().json.bearer_token }}"
+            },
+            {
+              "name": "Accept",
+              "value": "application/pdf"
+            },
+            {
+              "name": "User-Agent",
+              "value": "portfolio-n8n-automation"
+            },
+            {
+              "name": "Platform-n8n-workflow",
+              "value": "={{ $workflow.id }}"
+            },
+            {
+              "name": "Platform-n8n-execution",
+              "value": "={{ $execution.id }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file",
+              "outputPropertyName": "snapshot_binary"
+            }
+          },
+          "timeout": 120000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        820,
+        1900
+      ],
+      "id": "ae808e7c-d4f9-5d27-a3a2-a44456da14a5",
+      "name": "Download Snapshot",
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const prep     = $('Prepare Send Body').first().json;\nconst missing  = (prep._send_missing || []).filter(m => !String(m).startsWith('_warn'));\nconst warnings = (prep._send_missing || []).filter(m =>  String(m).startsWith('_warn'));\n\nconst dealUrl  = 'https://app.example.com/records/' + (prep._clean_app_id || prep.application_id || 'unknown');\nconst dealLink = '<' + dealUrl + '|' + (prep._clean_app_id || 'Unknown Deal') + '>';\n\nconst text = [\n  ':rotating_light: *Send Aborted — Missing/Invalid Data*',\n  '• Deal: '       + dealLink,\n  '• Execution: `' + $execution.id + '`',\n  '• Missing: `'   + missing.join(', ')  + '`',\n  warnings.length  ? '• Warnings: `' + warnings.join(', ') + '`' : null\n].filter(Boolean).join('\\n');\n\nreturn [{ json: {\n  success:         false,\n  outcome:         'send_validation_failed',\n  application_id:  prep._clean_app_id || prep.application_id,\n  missing,\n  warnings,\n  slack_ping_text: text\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        600,
+        2100
+      ],
+      "id": "1faf8eec-9395-52d6-a34a-545eec08b63e",
+      "name": "Result — Validation Failed"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.example.com/api/int/communication/emails",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Proper Bearer Token').first().json.bearer_token }}"
+            },
+            {
+              "name": "User-Agent",
+              "value": "AUSTIN_AGENTIC"
+            },
+            {
+              "name": "Platform-n8n-workflow",
+              "value": "={{ $workflow.id }}"
+            },
+            {
+              "name": "Platform-n8n-execution",
+              "value": "={{ $execution.id }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "=applications[{{ $('Prepare Send Body').first().json._clean_app_id }}][]",
+              "value": "={{ $('Prepare Send Body').first().json._clean_contact_email }}"
+            },
+            {
+              "name": "subject",
+              "value": "={{ $('Prepare Send Body').first().json._clean_subject }}"
+            },
+            {
+              "name": "body",
+              "value": "={{ $('Prepare Send Body').first().json._clean_html }}"
+            },
+            {
+              "name": "preferred_email_address[type]",
+              "value": "={{ $('Prepare Send Body').first().json._clean_pref_type }}"
+            },
+            {
+              "name": "preferred_email_address[value]",
+              "value": "={{ $('Prepare Send Body').first().json._clean_pref_value }}"
+            },
+            {
+              "name": "preferred_email_address[send_as_bulk]",
+              "value": "0"
+            },
+            {
+              "name": "sender_user_id",
+              "value": "={{ $('Prepare Send Body').first().json._clean_sender_id }}"
+            },
+            {
+              "parameterType": "formBinaryData",
+              "name": "attachments[]",
+              "inputDataFieldName": "snapshot_binary"
+            },
+            {
+              "name": "email_customization_id",
+              "value": "={{ $('Prepare Send Body').first().json._clean_customization_id }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1480,
+        1900
+      ],
+      "id": "401236c4-9534-586a-af6f-72c0a45d539b",
+      "name": "POST Send Email to Platform",
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://v2.convertapi.com/convert/pdf/to/encrypt?Secret=<YOUR_CONVERTAPI_SECRET>",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "accept",
+              "value": "application/octet-stream"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "UserPassword",
+              "value": "={{ $('Prepare Send Body').first().json._pdf_password }}"
+            },
+            {
+              "parameterType": "formBinaryData",
+              "name": "File",
+              "inputDataFieldName": "snapshot_binary"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file",
+              "outputPropertyName": "snapshot_binary"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1040,
+        1900
+      ],
+      "id": "f7bb35b5-9785-5867-8cbd-66474d2834ae",
+      "name": "ConverApi"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\nfor (const item of items) {\n  if (item.binary && item.binary.snapshot_binary) {\n    item.binary.snapshot_binary.mimeType = 'application/pdf';\n    item.binary.snapshot_binary.fileExtension = 'pdf';\n    item.binary.snapshot_binary.fileName = ($('Prepare Send Body').first().json.snapshot_file_name || 'Deal_Snapshot.pdf').replace(/\\.bin$/, '.pdf');\n  }\n}\n\nreturn items;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1260,
+        1900
+      ],
+      "id": "44808318-ead4-5ff6-a615-a9e77e9f56d9",
+      "name": "FIx Binary Metadata"
+    },
+    {
+      "parameters": {
+        "url": "=https://api.example.com/api/int/clients/{{ $('GET Application').first().json.data.client.id }}/email_customization",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('Proper Bearer Token').first().json.bearer_token }}"
+            },
+            {
+              "name": "User-Agent",
+              "value": "portfolio-n8n-automation"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -280,
+        2000
+      ],
+      "id": "7bba6e64-3079-5c86-84f4-5e841d40fa8f",
+      "name": "GET Email Customization"
+    }
+  ],
+  "pinData": {
+    "Start": [
+      {
+        "json": {
+          "slack_user_id": "<YOUR_SLACK_USER_ID>",
+          "deal_id": "<UUID>",
+          "access_token": "",
+          "slack_channel_id": "<YOUR_SLACK_CHANNEL_ID>",
+          "slack_thread_ts": ""
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Platform Authentication",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Platform Authentication": {
+      "main": [
+        [
+          {
+            "node": "Impersonate Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Impersonate Request": {
+      "main": [
+        [
+          {
+            "node": "Proper Bearer Token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Proper Bearer Token": {
+      "main": [
+        [
+          {
+            "node": "GET Application",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GET Application": {
+      "main": [
+        [
+          {
+            "node": "GET Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GET Files": {
+      "main": [
+        [
+          {
+            "node": "GET Aliases",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GET Aliases": {
+      "main": [
+        [
+          {
+            "node": "GET Email Customization",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build HTML": {
+      "main": [
+        [
+          {
+            "node": "Prepare Send Body",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Send Body": {
+      "main": [
+        [
+          {
+            "node": "IF Payload Ready",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Payload Ready": {
+      "main": [
+        [
+          {
+            "node": "IF Has Snapshot PDF",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Result — Validation Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Has Snapshot PDF": {
+      "main": [
+        [
+          {
+            "node": "Download Snapshot",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Download Snapshot": {
+      "main": [
+        [
+          {
+            "node": "ConverApi",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ConverApi": {
+      "main": [
+        [
+          {
+            "node": "FIx Binary Metadata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "FIx Binary Metadata": {
+      "main": [
+        [
+          {
+            "node": "POST Send Email to Platform",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GET Email Customization": {
+      "main": [
+        [
+          {
+            "node": "Build HTML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "POST Send Email to Platform": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "dZjekHysqMnXeSxs"
+  },
+  "versionId": "<UUID>",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "f845d5a3e6b66215ead8bb76d2ede3f47d99bf0acbff9d8b25945380037693b7"
+  },
+  "id": "4PI2igY7jsmkNjIQ",
+  "tags": []
+}

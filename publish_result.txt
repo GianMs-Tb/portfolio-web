@@ -1,0 +1,27 @@
+RESULTS
+ai-operations-copilot-n8n	FAIL	expected=['README.md', 'scripts/context_builder.js', 'scripts/intent_router.js', 'workflows/main_orchestrator.json']
+  error: error: could not write config file /private/var/folders/v0/xs570nh55bg1r1y9nsf870dm0000gn/T/portfolio-publish/ai-operations-copilot-n8n/.git/config: Operation not permitted
+fatal: could not set 'core.repositoryformatversion' to '0'
+secure-document-delivery-pipeline	FAIL	expected=['README.md', 'scripts/data_validator.js', 'templates/invoice_template.html', 'workflows/delivery_pipeline.json']
+  error: error: could not write config file /private/var/folders/v0/xs570nh55bg1r1y9nsf870dm0000gn/T/portfolio-publish/secure-document-delivery-pipeline/.git/config: Operation not permitted
+fatal: could not set 'core.repositoryformatversion' to '0'
+intelligent-follow-up-engine	FAIL	expected=['README.md', 'queries/state_lookup.sql', 'scripts/cooldown_evaluator.js', 'workflows/follow_up_core.json']
+  error: error: could not write config file /private/var/folders/v0/xs570nh55bg1r1y9nsf870dm0000gn/T/portfolio-publish/intelligent-follow-up-engine/.git/config: Operation not permitted
+fatal: could not set 'core.repositoryformatversion' to '0'
+GianMs-Tb	FAIL	expected=['README.md']
+  error: error: could not write config file /private/var/folders/v0/xs570nh55bg1r1y9nsf870dm0000gn/T/portfolio-publish/GianMs-Tb/.git/config: Operation not permitted
+fatal: could not set 'core.repositoryformatversion' to '0'
+VERIFY
+https://github.com/GianMs-Tb/ai-operations-copilot-n8n
+  roots: []
+  files: []
+https://github.com/GianMs-Tb/secure-document-delivery-pipeline
+  roots: []
+  files: []
+https://github.com/GianMs-Tb/intelligent-follow-up-engine
+  roots: []
+  files: []
+https://github.com/GianMs-Tb/GianMs-Tb
+  roots: []
+  files: []
+done

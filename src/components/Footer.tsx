@@ -21,7 +21,7 @@ export function Footer() {
               href={socialLinks.email}
               className="text-lg font-medium text-[#fafafa] transition-colors hover:text-[#818cf8]"
             >
-              hello@gianmarco.dev
+              {socialLinks.email.replace('mailto:', '')}
             </a>
             <div className="flex gap-4">
               <a

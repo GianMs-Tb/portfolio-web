@@ -225,5 +225,5 @@ export const skillCategories: SkillCategory[] = skillDomains.map((d) => ({
 export const socialLinks = {
   github: 'https://github.com/GianMs-Tb',
   linkedin: 'https://www.linkedin.com/in/gian-marco-saldarriaga-66a57b389',
-  email: 'mailto:hello@gianmarco.dev',
+  email: 'mailto:marcofyh@gmail.com',
 }

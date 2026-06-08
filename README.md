@@ -4,6 +4,8 @@
 
 Hybrid engineering portfolio: Automation Architect + Integration Engineer + Backend Developer + AI Automation Specialist.
 
+Portafolio: https://portfolio-web-pi-henna.vercel.app/#projects
+
 ---
 
 ## Profile
@@ -71,7 +73,7 @@ npm install && npm run dev
 
 ## Contact
 
-- **Email:** hello@gianmarco.dev
+- **Email:** marcofyh@gmail.com
 - **GitHub:** [github.com/GianMs-Tb](https://github.com/GianMs-Tb)
 - **LinkedIn:** [linkedin.com/in/gianmarcosaldarriaga](https://linkedin.com/in/gianmarcosaldarriaga)
 

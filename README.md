@@ -4,8 +4,6 @@
 
 Hybrid engineering portfolio: Automation Architect + Integration Engineer + Backend Developer + AI Automation Specialist.
 
-**Live site:** `npm run dev` → [http://localhost:5173](http://localhost:5173)
-
 ---
 
 ## Profile
